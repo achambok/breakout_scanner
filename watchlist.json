@@ -1,0 +1,27 @@
+{
+  "symbols": [
+    "EURUSD=X",
+    "GBPUSD=X",
+    "USDJPY=X",
+    "USDCHF=X",
+    "AUDUSD=X",
+    "NZDUSD=X",
+    "USDCAD=X",
+    "EURJPY=X",
+    "EURGBP=X",
+    "AUDJPY=X",
+    "GBPJPY=X",
+    "GC=F",    
+    "SI=F",    
+    "CL=F",    
+    "NG=F",
+    "SI=F",    
+    "ZC=F",    
+    "ZS=F",    
+    "ZW=F",
+    "RTY=F",    
+    "ES=F",    
+    "MNQ=F",    
+    "YM=F"    
+  ]
+}

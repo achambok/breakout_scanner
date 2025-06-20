@@ -1,0 +1,61 @@
+import streamlit as st
+import pandas as pd
+import json
+from utils import check_symbol, alert_desktop
+
+# --- Page Setup & Styles ---
+st.set_page_config(page_title="Breakout Scanner", layout="wide")
+st.markdown("""
+<style>
+div.block-container { padding-top: 1rem !important; }
+h1, h2, h3, .stButton > button, .stMetric {
+  text-align: center; margin: auto;
+}
+.navbar { background-color: #0d6efd; padding: 0.5rem 1rem; }
+.navbar-brand { color: white; font-weight: bold; font-size: 1.5rem; margin: auto; }
+#MainMenu, footer, header { visibility: hidden; }
+</style>
+<nav class="navbar"><span class="navbar-brand">📈 Breakout Scanner</span></nav>
+""", unsafe_allow_html=True)
+
+# --- Load Symbols ---
+with open("watchlist.json") as f:
+    symbols = json.load(f)["symbols"]
+
+# --- Scan Button ---
+st.header("🔍 Run Breakout + Signal-Day Scan")
+if st.button("Run Scan"):
+    result_list = [check_symbol(sym) for sym in symbols]
+    results = pd.DataFrame([r for r in result_list if r])
+    st.session_state["df"] = results
+
+# --- Display Results ---
+df = st.session_state.get("df", pd.DataFrame())
+
+if not df.empty:
+    st.metric("Symbols Scanned", len(symbols))
+    st.metric("Breakouts Found", len(df))
+
+    # Color conditions
+    def color_bool(val, color):
+        return f"color: {color};" if val else ""
+    df_styled = df.style.applymap(lambda v: color_bool(v, "green"),
+                                  subset=["Breakout Up", "FGD"])\
+                        .applymap(lambda v: color_bool(v, "red"),
+                                  subset=["Breakout Down", "FRD"])\
+                        .applymap(lambda v: color_bool(v, "gray"),
+                                  subset=["Inside Day"])
+
+    st.dataframe(df_styled, use_container_width=True)
+    alert_desktop("Breakout Scanner", f"{len(df)} symbols matched today")
+else:
+    st.info("No matches yet — click **Run Scan**.")
+
+st.caption("""
+**Key Columns Explained**  
+• **Breakout Up (green):** 3+ days closing above prior highs  
+• **Breakout Down (red):** 3+ days closing below prior lows  
+• **FRD (red):** First Red Day after bullish breakout  
+• **FGD (green):** First Green Day after bearish breakout  
+• **Inside Day (gray):** Today's range is within yesterday's  
+""")

@@ -1,0 +1,154 @@
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog
+import yfinance as yf
+import json
+import datetime
+import pandas as pd
+
+# === Configuration ===
+BREAKOUT_DAYS = 3
+EXTREME_THRESHOLD = 0.10  # 10%
+
+def date_filter_ok():
+    today = datetime.datetime.now()
+    weekday = today.weekday()
+    is_tuesday_or_thursday = weekday in [1, 3]
+    is_week_start = weekday == 0
+    is_week_end = weekday == 4
+    is_month_start = today.day <= 2
+    is_month_end = today.day >= 28
+    return any([is_tuesday_or_thursday, is_week_start, is_week_end, is_month_start, is_month_end])
+
+def check_symbol(symbol):
+    try:
+        data = yf.Ticker(symbol).history(period="1mo", interval="1d")
+        if len(data) < 21:
+            return None
+
+        closes = data["Close"]
+        highs = data["High"]
+        lows = data["Low"]
+
+        breakout_count = 0
+        for i in range(-BREAKOUT_DAYS, 0):
+            if closes[i] > highs[i - 1]:
+                breakout_count += 1
+
+        if breakout_count < BREAKOUT_DAYS:
+            return None
+
+        recent_close = closes[-1]
+        week_high = highs[-5:].max()
+        week_low = lows[-5:].min()
+        month_high = highs[-21:].max()
+        month_low = lows[-21:].min()
+
+        near_extreme = any([
+            recent_close >= week_high * (1 - EXTREME_THRESHOLD),
+            recent_close <= week_low * (1 + EXTREME_THRESHOLD),
+            recent_close >= month_high * (1 - EXTREME_THRESHOLD),
+            recent_close <= month_low * (1 + EXTREME_THRESHOLD),
+        ])
+
+        if not near_extreme or not date_filter_ok():
+            return None
+
+        return {
+            "Symbol": symbol,
+            "Close": f"{recent_close:.2f}",
+            "Breakout Days": breakout_count,
+            "Week High": f"{week_high:.2f}",
+            "Week Low": f"{week_low:.2f}",
+            "Month High": f"{month_high:.2f}",
+            "Month Low": f"{month_low:.2f}"
+        }
+
+    except Exception as e:
+        return None
+
+def load_watchlist():
+    try:
+        with open("watchlist.json", "r") as f:
+            return json.load(f)["symbols"]
+    except Exception as e:
+        messagebox.showerror("Error", f"Failed to load watchlist: {e}")
+        return []
+
+def run_scan():
+    symbols = load_watchlist()
+    results = []
+    progress_label.config(text="🔍 Scanning symbols...")
+    root.update_idletasks()
+
+    for sym in symbols:
+        result = check_symbol(sym)
+        if result:
+            results.append(result)
+
+    progress_label.config(text=f"✅ Scan complete: {len(results)} match criteria.")
+    update_table(results)
+    global scan_results
+    scan_results = results
+
+def update_table(results):
+    for row in tree.get_children():
+        tree.delete(row)
+    for item in results:
+        tree.insert("", tk.END, values=list(item.values()))
+
+def export_to_csv():
+    if not scan_results:
+        messagebox.showwarning("No Data", "No scan results to export.")
+        return
+
+    file_path = filedialog.asksaveasfilename(defaultextension=".csv",
+                                             filetypes=[("CSV files", "*.csv")])
+    if file_path:
+        df = pd.DataFrame(scan_results)
+        df.to_csv(file_path, index=False)
+        messagebox.showinfo("Success", f"Exported to {file_path}")
+
+# === UI ===
+root = tk.Tk()
+root.title("📊 Breakout & Extreme Price Scanner")
+root.geometry("1000x550")
+
+frame = ttk.Frame(root)
+frame.pack(padx=10, pady=10, fill="both", expand=True)
+
+# === Buttons ===
+button_frame = ttk.Frame(frame)
+button_frame.pack(fill="x")
+
+ttk.Button(button_frame, text="Run Scan", command=run_scan).pack(side="left", padx=5)
+ttk.Button(button_frame, text="Export to CSV", command=export_to_csv).pack(side="left", padx=5)
+
+progress_label = ttk.Label(button_frame, text="Ready to scan.")
+progress_label.pack(side="left", padx=20)
+
+# === Table ===
+columns = ["Symbol", "Close", "Breakout Days", "Week High", "Week Low", "Month High", "Month Low"]
+tree = ttk.Treeview(frame, columns=columns, show="headings")
+for col in columns:
+    tree.heading(col, text=col)
+    tree.column(col, anchor="center", width=120)
+
+tree.pack(fill="both", expand=True)
+
+# === Info Panel ===
+info = tk.Label(root, text="""
+ℹ️ Column Definitions:
+- Week High/Low: Highest and lowest prices from the last 5 trading days
+- Month High/Low: Highest and lowest prices from the last 21 trading days
+- Breakout Days: Number of consecutive days where Close > Prev High
+- Close: Most recent closing price
+
+Criteria:
+✔ At least 3 breakout days
+✔ Close is near extreme (±10% from weekly/monthly high/low)
+✔ Date: Tuesday/Thursday, or start/end of week/month
+""", justify="left", font=("Arial", 10), anchor="w")
+info.pack(fill="x", padx=10, pady=10)
+
+scan_results = []
+root.mainloop()

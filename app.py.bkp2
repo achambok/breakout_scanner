@@ -1,0 +1,68 @@
+import streamlit as st
+import pandas as pd
+import json
+from utils import check_symbol, alert_desktop
+from st_aggrid import AgGrid, GridOptionsBuilder, JsCode
+
+# --- Load symbols ---
+with open("watchlist.json") as f:
+    symbols = json.load(f)["symbols"]
+
+# --- Page Setup & CSS ---
+st.set_page_config(page_title="Breakout + Signals", layout="wide")
+st.markdown("""
+<style>
+div.block-container { padding-top: 1rem !important; }
+h1, .stButton > button { text-align: center; margin: auto; }
+#MainMenu, header, footer { visibility: hidden; }
+</style>
+<nav class="navbar" style="background-color:#0d6efd;padding:0.5rem;">
+  <span style="color:white;font-size:1.5rem;">📈 Breakout + Signals Scanner</span>
+</nav>
+""", unsafe_allow_html=True)
+
+# --- Scan section ---
+st.header("🔍 Run Scan")
+if st.button("Run Scan"):
+    df = pd.DataFrame([check_symbol(sym) for sym in symbols]).dropna()
+    st.session_state.df = df
+
+# --- Display results ---
+if "df" in st.session_state:
+    df = st.session_state.df
+    st.metric("Symbols Scanned", len(symbols))
+    st.metric("Breakouts/Signals Found", len(df))
+
+    # Setup AgGrid with color formatting
+    gb = GridOptionsBuilder.from_dataframe(df)
+    cell_style = JsCode("""
+        function(params) {
+            const field = params.colDef.field;
+            if ((field === "FRD" || field === "Breakout Down") && params.value === true) {
+                return { color: 'white', backgroundColor: 'red' };
+            }
+            if ((field === "FGD" || field === "Breakout Up") && params.value === true) {
+                return { color: 'white', backgroundColor: 'green' };
+            }
+            return {};
+        }
+    """)
+    for col in ["FRD", "FGD", "Breakout Up", "Breakout Down"]:
+        gb.configure_column(col, cellStyle=cell_style)
+
+    grid = AgGrid(df, gb.build(), allow_unsafe_jscode=True, update_mode="MODEL_CHANGED")
+
+    # Send desktop alert if any results
+    if not df.empty:
+        alert_desktop("Breakout Scanner", f"{len(df)} symbols matched!")
+
+else:
+    st.info("Click ‘Run Scan’ to detect breakouts and signal days.")
+
+# --- Legend ---
+st.caption("""
+**Legend:**  
+- 🔴 **FRD / Breakout Down** = Red highlights  
+- 🟢 **FGD / Breakout Up** = Green highlights  
+• Data reflects latest scan; run again to refresh
+""")
