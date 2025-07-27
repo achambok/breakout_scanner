@@ -36,8 +36,8 @@ class ScanResult(BaseModel):
     Month_High: float
     Month_Low: float
 
-@app.get("/scan", response_model=List[ScanResult])
-async def scan():
+@app.get("/api/breakouts", response_model=List[ScanResult])
+async def breakouts():
     results = []
     for sym in symbols:
         r = check_symbol(sym)
